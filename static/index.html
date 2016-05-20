@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<!-- Web browser side -->
+<html>
+<head>
+<style>canvas { width: 100%; height: 100% }</style>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r76/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.4.6/socket.io.min.js"></script>
+<script>
+function make_id()
+{
+    var text = "";
+    var possible = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+    for (var i = 0; i < 5; i++) {
+        text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+}
+window.onload = function() {
+    if (!window.location.hash) {
+        window.location.hash = make_id();
+    }
+    $('#yaw').prop("checked", true)
+
+    var scene = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 10000);
+    var renderer = new THREE.WebGLRenderer();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+    var geometry = new THREE.BoxGeometry(700, 700, 700, 10, 10, 10);
+    //var material = new THREE.MeshBasicMaterial({color: 0xfffff, wireframe: true});
+    var material = new THREE.MeshBasicMaterial({color: 0xff0000, wireframe: false});
+    //var material = new THREE.MeshLambertMaterial({color: 0xff0000});
+    var cube = new THREE.Mesh(geometry, material);
+    edges = new THREE.EdgesHelper(cube, 0x000000 );
+    scene.add(cube);
+    scene.add(edges);
+    camera.position.z = 1000;        
+    function render() {
+        requestAnimationFrame(render);
+        renderer.render(scene, camera);
+    };
+    render();
+
+    // Chrome returns accelerometer data as 10 * G. This turns that into an angle.
+    function correctAngle(angle) {
+        return 90 * (angle / 10);
+    }
+
+    // Returns radians for degrees input
+    function radians(degrees) {
+        return (degrees * Math.PI / 180)
+    }
+
+    // Smooths out jagged inputs from the sensor.
+    var SMOOTHING_FACTOR = 4;
+    var data_smoothing = [[],[],[]]; // x, y, z
+    for (var i = 0; i < data_smoothing.length; i++) {
+        for (var j = 0; j < SMOOTHING_FACTOR; j++) {
+            data_smoothing[i].push(0);
+        }
+    }
+    // Smooths out input using the given array
+    function smooth(array_to_use, input) {
+        array_to_use.shift();
+        array_to_use.push(input);
+        // Return the average of the array.
+        return array_to_use.reduce(function(sum, a) { return sum + a },0) / (array_to_use.length||1); 
+    }
+    var socket = io('http://' + window.location.hostname + ':' + window.location.port);
+    // On connect, subscribe to the hash's channel
+    socket.on('connect', function(data) {
+            socket.emit('subscribe', window.location.hash || 'default');
+    });
+    // Update our cube's position.
+    socket.on('update', function (data) {
+            if (data.type == 'MOTION') {
+                x = radians(smooth(data_smoothing[0], correctAngle(data.x)));
+                y = radians(smooth(data_smoothing[1], correctAngle(data.y)));
+                z = radians(smooth(data_smoothing[2], data.z)); // Doesn't need to be corrected, this is an actual angle from the compass.
+    
+                cube.rotation.z = x; // roll
+                cube.rotation.x = y; // pitch
+                if ($('#yaw').prop("checked")) {
+                    cube.rotation.y = z; // yaw (only if wanted... Compass inputs can be odd.)
+                }
+            } else if (data.type == 'GO') {
+                // Ugly way to make the cube pop out... Just for added actions.
+                var scaleBy = 1.2;
+                var scaleBack = 5/6;
+                cube.geometry.scale(scaleBy, scaleBy, scaleBy);
+                setTimeout(function() {
+                        cube.geometry.scale(scaleBack, scaleBack, scaleBack);
+                }, 500);
+                console.log("GO");
+            }
+    });
+}
+</script>
+</head>
+<body>
+<label><input type="checkbox" id="yaw"></input>Yaw</label>
+</body>
+</html>

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html>
+<head>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.2.2/jquery.min.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.6/css/materialize.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.6/js/materialize.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.4.6/socket.io.min.js"></script>
+<script>
+var enabled = false;
+var socket = io('http://' + window.location.hostname + ':' + window.location.port);
+var delay = 100;
+$(window).load(function() {
+    $('#btnOn').click(function() { enabled = true; });
+    $('#btnOff').click(function() { enabled = false; });
+    $('#btnGo').click(function() { 
+    });
+    $('#delay').on('change mousemove', function() {
+        delay = $(this).val();
+    });
+});
+var last = new Date().getTime();
+if (window.DeviceMotionEvent != undefined) {
+    var alpha;
+
+    window.addEventListener('deviceorientation', function(event) {
+            alpha = event.alpha; // Compass... Found in a different event, have to field it to devicemotion event.
+    });
+    window.ondevicemotion = function(e) {
+        if (enabled && new Date().getTime() - last > delay) { // delay for a few ms so we don't send it as hard as we can.
+            last = new Date().getTime();
+            var message = {};
+            message.type = 'MOTION';
+            message.x = e.accelerationIncludingGravity.x;
+            message.y = e.accelerationIncludingGravity.y;
+            message.z = alpha;
+            message.room = window.location.hash || 'default'; // Use the hash to choose the room.
+            try {
+                socket.emit('update', message);
+            } catch (e) {}
+        }
+    }
+}
+</script>
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <div class="col s12">
+            <label>Delay between updates<input type="range" id="delay" min="5" max="1000" step="5"></input></label>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col s12">
+            <a id="btnOn" class="waves-effect waves-light btn-large">On</a>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col s12">
+            <a id="btnOff" class="waves-effect waves-light btn-large">Off</a>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col s12">
+            <a id="btnGo" class="waves-effect waves-light btn-large">Go</a>
+        </div>
+    </div>
+</div>
+</body>
+</html>
